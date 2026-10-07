@@ -32,7 +32,7 @@ export async function hashPassword(password, saltValue = null) {
       name: "PBKDF2",
       hash: "SHA-256",
       salt,
-      iterations: 120000
+      iterations: 100000
     },
     material,
     256
