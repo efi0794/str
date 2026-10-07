@@ -1,0 +1,6 @@
+# 32 random bytes encoded as Base64.
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+MASTER_KEY=
+
+# Optional. If set, new registrations require this invite code.
+REGISTRATION_CODE=

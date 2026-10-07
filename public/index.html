@@ -1,42 +1,112 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HoYo Daily Status</title>
-<style>
-:root{color-scheme:dark;font-family:Inter,"Noto Sans JP",system-ui,sans-serif;background:#070a12;color:#f7f8ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 10%,rgba(76,93,255,.16),transparent 30%),radial-gradient(circle at 85% 15%,rgba(68,230,255,.1),transparent 28%),#070a12}
-main{width:min(1180px,calc(100% - 30px));margin:auto;padding:50px 0 80px}header{display:flex;justify-content:space-between;gap:24px;align-items:end;margin-bottom:24px}.eyebrow,.game-code{letter-spacing:.16em;font-size:11px;color:#90a4ff;font-weight:900}h1{font-size:clamp(42px,7vw,74px);line-height:.95;margin:8px 0}.lead,.muted{color:#8f98aa}button{border:1px solid #2b3447;background:#111827;color:#fff;padding:12px 18px;border-radius:14px;font-weight:800;cursor:pointer}
-.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.pill{padding:8px 12px;border:1px solid #273044;border-radius:999px;color:#a9b1c2;background:#0d1320;font-size:13px}.pill b{color:#fff}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card,.panel{border:1px solid rgba(255,255,255,.09);background:rgba(12,17,30,.86);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,.22);overflow:hidden}.card{padding:22px;position:relative}.card:before{content:"";position:absolute;inset:0 auto auto 0;width:100%;height:3px;background:var(--accent)}.card.blue{--accent:#6c7cff}.card.gold{--accent:#e9b95f}.card.lime{--accent:#9ae63c}
-.card-head{display:flex;justify-content:space-between;gap:12px}.card h2{font-size:25px;margin:6px 0 4px}.badge{font-size:11px;font-weight:900;border-radius:999px;padding:7px 9px;height:max-content}.ok{color:#6ff0b5;background:rgba(80,235,166,.1);border:1px solid rgba(80,235,166,.25)}.bad{color:#ff8d8d;background:rgba(255,90,90,.1);border:1px solid rgba(255,90,90,.25)}.off{color:#8f98aa;background:#141a27;border:1px solid #252d3d}.verdict{margin:22px 0;padding:18px;border-radius:18px;background:#0a0f1b;border:1px solid #1c2537}.verdict span{font-size:12px;color:#7e879a}.verdict strong{display:block;margin-top:4px;font-size:28px}.done strong{color:#72efb9}.todo strong{color:#ffd179}.unknown strong{color:#abb4c8}
-.stat{padding:15px 0;border-top:1px solid #1b2333}.row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.row span{color:#8d96a9;font-size:13px}.row strong{font-size:18px}.detail{font-size:11px;color:#687287;margin-top:5px;min-height:16px}.bar{height:6px;background:#20283a;border-radius:999px;overflow:hidden;margin-top:9px}.bar i{display:block;height:100%;background:var(--accent);width:0}.extra{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.mini{background:#0a0f1b;border:1px solid #1b2333;border-radius:13px;padding:11px}.mini span{display:block;font-size:10px;color:#6f788c}.mini b{display:block;font-size:13px;margin-top:3px}.panel{padding:22px}.hidden{display:none!important}.error{border-color:rgba(255,90,90,.3)}footer{display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap;color:#606a7e;font-size:11px;margin-top:18px;padding:0 3px}@media(max-width:920px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:650px){header{flex-direction:column;align-items:start}.grid{grid-template-columns:1fr}}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b12">
+  <title>HoYo Daily Status</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body><main>
-<header><div><div class="eyebrow">HOYOVERSE DAILY COMMAND CENTER</div><h1>今日、全部やった？</h1><div class="lead">3ゲームのデイリーをまとめてチェック。</div></div><button id="refresh">↻ 最新状態に更新</button></header>
-<div id="loading" class="panel">HoYoLABと通信中…</div>
-<div id="error" class="panel error hidden"><strong>取得できません</strong><p id="errorText"></p></div>
-<section id="content" class="hidden"><div class="summary">
-<span class="pill">設定 <b id="configured">0</b></span><span class="pill">完了 <b id="completed">0</b></span><span class="pill">未完了 <b id="incomplete">0</b></span><span class="pill">判定不能 <b id="unknown">0</b></span><span class="pill">Discord <b id="discord">OFF</b></span>
-</div><div id="games" class="grid"></div><footer><span id="updated"></span><span>Discord通知: 毎日21:00 JST / 未完了がある時だけ</span></footer></section>
-</main>
-<script>
-const el=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-const pct=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&b>0?Math.min(100,Math.max(0,a/b*100)):0;
-function verdict(g){if(!g.configured)return["unknown","未設定","READMEを見てUIDを設定"];if(g.error)return["unknown","取得エラー",g.error.message];if(g.daily.completed===true)return["done","完了！",g.daily.detail];if(g.daily.completed===false)return["todo","まだ残ってる",g.daily.detail];return["unknown","判定不能",g.daily.detail]}
-function card(g){
- const [cls,title,detail]=verdict(g);
- const auth=!g.configured?'<span class="badge off">未設定</span>':g.error?'<span class="badge bad">取得失敗</span>':'<span class="badge ok">● 認証OK</span>';
- const dailyValue=g.daily.current!=null&&g.daily.max!=null?esc(g.daily.current+" / "+g.daily.max):"--";
- const resourceValue=g.resource.current!=null&&g.resource.max!=null?esc(g.resource.current+" / "+g.resource.max):"--";
- const extras=(g.extras||[]).map(x=>'<div class="mini"><span>'+esc(x.label)+'</span><b>'+esc(x.value)+'</b></div>').join("");
- const check=g.checkIn?.signedToday===true?"受取済み":g.checkIn?.signedToday===false?"未受取":"--";
- return '<article class="card '+esc(g.accent)+'"><div class="card-head"><div><div class="game-code">'+esc(g.id.toUpperCase())+'</div><h2>'+esc(g.name)+'</h2><div class="muted">UID: '+esc(g.uid||"未設定")+'</div></div>'+auth+'</div><div class="verdict '+cls+'"><span>TODAY</span><strong>'+esc(title)+'</strong><div class="detail">'+esc(detail)+'</div></div><div class="stat"><div class="row"><span>'+esc(g.daily.label)+'</span><strong>'+dailyValue+'</strong></div><div class="bar"><i style="width:'+pct(Number(g.daily.current),Number(g.daily.max))+'%"></i></div></div><div class="stat"><div class="row"><span>'+esc(g.resource.label)+'</span><strong>'+resourceValue+'</strong></div><div class="bar"><i style="width:'+pct(Number(g.resource.current),Number(g.resource.max))+'%"></i></div></div><div class="stat"><div class="row"><span>HoYoLABログボ</span><strong>'+check+'</strong></div></div>'+(extras?'<div class="extra">'+extras+'</div>':'')+'</article>';
-}
-async function load(){
- el("loading").classList.remove("hidden");el("error").classList.add("hidden");el("content").classList.add("hidden");el("refresh").disabled=true;
- try{const r=await fetch("/api/status",{cache:"no-store"}),d=await r.json();if(!r.ok||!d.ok)throw d;el("games").innerHTML=d.games.map(card).join("");el("configured").textContent=d.summary.configured;el("completed").textContent=d.summary.completed;el("incomplete").textContent=d.summary.incomplete;el("unknown").textContent=d.summary.unknown;el("discord").textContent=d.notification.enabled?"ON":"OFF";el("updated").textContent="最終更新: "+new Date(d.fetchedAt).toLocaleString("ja-JP");el("loading").classList.add("hidden");el("content").classList.remove("hidden")}
- catch(e){el("loading").classList.add("hidden");el("error").classList.remove("hidden");el("errorText").textContent=e?.error?.message||"サーバーに接続できません。"}finally{el("refresh").disabled=false}
-}
-el("refresh").onclick=load;load();
-</script></body></html>
+<body>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">H</span>
+        <span><b>HoYo Daily</b><small>STATUS CONSOLE</small></span>
+      </a>
+      <div id="userMenu" class="user-menu hidden">
+        <span id="userEmail"></span>
+        <button id="logoutBtn" class="button ghost small">ログアウト</button>
+      </div>
+    </header>
+
+    <section id="authView" class="auth-layout hidden">
+      <div class="hero-copy">
+        <p class="eyebrow">SHARED HOYOVERSE DASHBOARD</p>
+        <h1>今日、<br>全部やった？</h1>
+        <p>スターレイル・原神・ゼンゼロの日課をまとめて確認。21時に未完了なら、自分のDiscordへ通知できます。</p>
+        <div class="feature-row">
+          <span>☁ 24時間稼働</span><span>🔐 認証情報を暗号化</span><span>👥 複数ユーザー</span>
+        </div>
+      </div>
+
+      <div class="auth-card">
+        <div class="tabs">
+          <button class="tab active" data-tab="login">ログイン</button>
+          <button class="tab" data-tab="register">新規登録</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>メールアドレス<input name="email" type="email" autocomplete="email" required></label>
+          <label>パスワード<input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="button primary" type="submit">ログイン</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <label>メールアドレス<input name="email" type="email" autocomplete="email" required></label>
+          <label>パスワード<input name="password" type="password" minlength="10" autocomplete="new-password" required><small>10文字以上</small></label>
+          <label>招待コード <em>（設定されている場合のみ）</em><input name="inviteCode" type="password" autocomplete="off"></label>
+          <button class="button primary" type="submit">アカウント作成</button>
+        </form>
+        <p id="authMessage" class="form-message"></p>
+      </div>
+    </section>
+
+    <section id="appView" class="hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">YOUR DAILY BOARD</p><h1>今日、全部やった？</h1><p>3ゲームの日課とリソースを1画面でチェック。</p></div>
+        <div class="heading-actions"><button id="refreshBtn" class="button ghost">↻ 更新</button><button id="settingsBtn" class="button primary">⚙ 設定</button></div>
+      </div>
+
+      <div id="summary" class="summary-row"></div>
+      <div id="statusMessage" class="notice hidden"></div>
+      <div id="games" class="game-grid"></div>
+      <p id="updatedAt" class="updated"></p>
+
+      <dialog id="settingsDialog" class="settings-dialog">
+        <form id="settingsForm" method="dialog">
+          <div class="dialog-head"><div><p class="eyebrow">ACCOUNT SETTINGS</p><h2>ゲーム・通知設定</h2></div><button type="button" id="closeSettings" class="icon-button">×</button></div>
+
+          <section class="settings-section">
+            <h3>HoYoLAB認証</h3>
+            <p>ブラウザでHoYoLABへログインし、Cookieの <code>ltoken_v2</code> と <code>ltuid_v2</code> を入力します。保存時に暗号化され、画面には再表示しません。</p>
+            <div class="two-col">
+              <label>ltoken_v2<input id="hoyoLtokenV2" type="password" autocomplete="off" placeholder="変更する時だけ入力"></label>
+              <label>ltuid_v2<input id="hoyoLtuidV2" inputmode="numeric" autocomplete="off" placeholder="変更する時だけ入力"></label>
+            </div>
+            <label class="check"><input id="clearHoyo" type="checkbox">保存済みHoYoLAB認証を削除する</label>
+            <div id="hoyoState" class="state-text"></div>
+          </section>
+
+          <section class="settings-section">
+            <h3>ゲームUID</h3>
+            <div class="uid-grid">
+              <label>崩壊：スターレイル<input id="hsrUid" inputmode="numeric" placeholder="8xxxxxxxx"></label>
+              <label>原神<input id="genshinUid" inputmode="numeric" placeholder="8xxxxxxxx"></label>
+              <label>ゼンレスゾーンゼロ<input id="zzzUid" inputmode="numeric" placeholder="UID"></label>
+            </div>
+            <p class="micro">遊んでいないゲームは空欄でOKです。</p>
+          </section>
+
+          <section class="settings-section">
+            <h3>Discord通知</h3>
+            <label>Webhook URL<input id="discordWebhookUrl" type="password" autocomplete="off" placeholder="変更する時だけ入力"></label>
+            <div class="inline-options">
+              <label class="check"><input id="discordEnabled" type="checkbox" checked>毎日21:00の未完了通知を有効にする</label>
+              <label class="check danger"><input id="clearDiscord" type="checkbox">保存済みWebhookを削除</label>
+            </div>
+            <div class="button-row"><button id="testDiscordBtn" type="button" class="button ghost">Discordテスト送信</button></div>
+            <div id="discordState" class="state-text"></div>
+          </section>
+
+          <div class="dialog-actions"><span id="settingsMessage" class="form-message"></span><button type="submit" class="button primary">設定を保存</button></div>
+        </form>
+      </dialog>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
