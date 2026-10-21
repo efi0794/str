@@ -66,6 +66,90 @@
       <div id="games" class="game-grid"></div>
       <p id="updatedAt" class="updated"></p>
 
+      <section id="staminaPanel" class="analytics-panel">
+        <div class="analytics-head">
+          <div>
+            <p class="eyebrow">HISTORY & ANALYTICS</p>
+            <h2>スタミナ使用時間の統計・履歴</h2>
+            <p>HoYoLABで残量が減ったタイミングを推定記録します。正確な時刻が分かるものは手動登録できます。</p>
+          </div>
+          <div class="analytics-filters">
+            <label>ゲーム
+              <select id="staminaGameFilter">
+                <option value="all">すべて</option>
+                <option value="hsr">スターレイル</option>
+                <option value="genshin">原神</option>
+                <option value="zzz">ゼンゼロ</option>
+              </select>
+            </label>
+            <label>期間
+              <select id="staminaDaysFilter">
+                <option value="7">7日</option>
+                <option value="30" selected>30日</option>
+                <option value="90">90日</option>
+                <option value="365">365日</option>
+              </select>
+            </label>
+            <button id="staminaRefreshBtn" type="button" class="button ghost small">↻ 更新</button>
+          </div>
+        </div>
+
+        <div id="staminaMessage" class="state-text"></div>
+        <div id="staminaSummary" class="analytics-summary"></div>
+
+        <div class="analytics-grid">
+          <section class="analytics-card">
+            <h3>よく使う時間帯（JST）</h3>
+            <p class="micro">青＝手動 / 橙＝HoYoLAB残量減少からの推定</p>
+            <div id="staminaHours" class="hour-chart"></div>
+          </section>
+          <section class="analytics-card">
+            <h3>最近の日別推移</h3>
+            <div id="staminaDaily" class="daily-list"></div>
+          </section>
+        </div>
+
+        <section class="analytics-card manual-card">
+          <h3>スタミナ使用を手動登録</h3>
+          <form id="staminaUseForm" class="manual-form">
+            <label>ゲーム
+              <select id="staminaUseGame" required>
+                <option value="hsr">スターレイル</option>
+                <option value="genshin">原神</option>
+                <option value="zzz">ゼンゼロ</option>
+              </select>
+            </label>
+            <label>使用日時（JST）<input id="staminaUsedAt" type="datetime-local" required></label>
+            <label>消費量<input id="staminaAmount" type="number" min="1" max="999999" required placeholder="例：120"></label>
+            <label>メモ<input id="staminaNote" type="text" maxlength="200" placeholder="例：デイリー消化"></label>
+            <button class="button primary" type="submit">＋ 記録</button>
+          </form>
+        </section>
+
+        <section class="analytics-card">
+          <div class="history-head"><h3>使用履歴</h3><span class="micro">1件ずつ削除できます</span></div>
+          <div class="table-scroll">
+            <table class="history-table">
+              <thead><tr><th>日時（JST）</th><th>ゲーム</th><th>量</th><th>区分</th><th>メモ</th><th>操作</th></tr></thead>
+              <tbody id="staminaHistory"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <details class="analytics-card resource-history">
+          <summary>スタミナ残量の観測履歴</summary>
+          <p class="micro">自動推定の比較用データです。削除せず残します。</p>
+          <div class="table-scroll">
+            <table class="history-table">
+              <thead><tr><th>日時（JST）</th><th>ゲーム</th><th>残量</th></tr></thead>
+              <tbody id="staminaResourceHistory"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <p class="analytics-note">※ 推定履歴は「前回確認時より残量が減っていた」ことを記録したものです。自然回復を挟むため、実際の使用時刻・消費量と完全には一致しません。</p>
+      </section>
+
       <dialog id="settingsDialog" class="settings-dialog">
         <form id="settingsForm" method="dialog">
           <div class="dialog-head"><div><p class="eyebrow">ACCOUNT SETTINGS</p><h2>ゲーム・通知設定</h2></div><button type="button" id="closeSettings" class="icon-button">×</button></div>
