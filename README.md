@@ -11,6 +11,9 @@
 - HoYoLABの ltoken_v2 / ltuid_v2 をAES-256-GCMで暗号化して保存
 - Discord Webhookも暗号化して保存
 - 毎日21:00 JSTに、明確な未完了デイリーがある人だけDiscord通知
+- スタミナ残量の観測履歴を保存し、減少を推定履歴として記録
+- スタミナ使用時間の7/30/90/365日統計（JST）
+- 正確な使用時刻・消費量の手動登録と履歴の個別削除
 - 元のローカルNode.js版は legacy-node ブランチに保存
 
 > 非公式ツールです。HoYoverse / COGNOSPHERE / Cloudflare / Discord の公式アプリではありません。
@@ -55,7 +58,9 @@ wrangler.jsonc の
 
     npm run db:migrate:remote
 
-migrations/0001_init.sql が適用されます。
+migrations/0001_init.sql と、スタミナ履歴用の migrations/0002_stamina_history.sql が適用されます。
+
+すでに0001を適用済みの環境でも同じコマンドを再実行すれば、未適用の0002だけが追加適用されます。
 
 ## 6. 暗号化用MASTER_KEYを作る
 
