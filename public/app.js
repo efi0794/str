@@ -117,6 +117,148 @@ async function loadDashboard() {
   }
 }
 
+const GAME_NAMES = {
+  hsr: "スターレイル",
+  genshin: "原神",
+  zzz: "ゼンゼロ"
+};
+
+function formatJst(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit"
+  }).format(date);
+}
+
+function jstInputNow() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 16);
+}
+
+function sourceLabel(source) {
+  return source === "MANUAL" ? "手動" : "推定";
+}
+
+function sourceClass(source) {
+  return source === "MANUAL" ? "manual" : "estimated";
+}
+
+async function loadStaminaAnalytics() {
+  if (!state.me) return;
+  const game = $("staminaGameFilter").value || "all";
+  const days = $("staminaDaysFilter").value || "30";
+  $("staminaMessage").textContent = "履歴を読み込み中…";
+  try {
+    const data = await api("/api/stamina/analytics?game=" + encodeURIComponent(game) + "&days=" + encodeURIComponent(days));
+
+    const totals = { MANUAL: { count: 0, amount: 0 }, ESTIMATED: { count: 0, amount: 0 } };
+    for (const row of data.summary || []) {
+      if (!totals[row.source]) continue;
+      totals[row.source] = { count: Number(row.event_count) || 0, amount: Number(row.total_amount) || 0 };
+    }
+    $("staminaSummary").innerHTML =
+      '<div class="analytics-kpi"><span>手動記録</span><b>' + totals.MANUAL.count + '回</b><small>合計 ' + totals.MANUAL.amount + '</small></div>' +
+      '<div class="analytics-kpi"><span>自動推定</span><b>' + totals.ESTIMATED.count + '回</b><small>合計 ' + totals.ESTIMATED.amount + '</small></div>' +
+      '<div class="analytics-kpi"><span>期間</span><b>' + escapeHtml(days) + '日</b><small>' + (game === "all" ? "全ゲーム" : escapeHtml(GAME_NAMES[game] || game)) + '</small></div>';
+
+    const hourMap = Array.from({ length: 24 }, (_, hour) => ({ hour, MANUAL: 0, ESTIMATED: 0 }));
+    for (const row of data.hours || []) {
+      const hour = Number(row.hour_jst);
+      if (hour >= 0 && hour < 24 && hourMap[hour] && hourMap[hour][row.source] != null) {
+        hourMap[hour][row.source] += Number(row.total_amount) || 0;
+      }
+    }
+    const hourMax = Math.max(1, ...hourMap.map((x) => x.MANUAL + x.ESTIMATED));
+    $("staminaHours").innerHTML = hourMap.map((item) => {
+      const manualHeight = Math.round(item.MANUAL / hourMax * 100);
+      const estimatedHeight = Math.round(item.ESTIMATED / hourMax * 100);
+      const title = item.hour + "時: 手動 " + item.MANUAL + " / 推定 " + item.ESTIMATED;
+      return '<div class="hour-col" title="' + escapeHtml(title) + '">' +
+        '<div class="hour-bars"><i class="manual" style="height:' + manualHeight + '%"></i><i class="estimated" style="height:' + estimatedHeight + '%"></i></div>' +
+        '<small>' + item.hour + '</small></div>';
+    }).join("");
+
+    const dayMap = new Map();
+    for (const row of data.daily || []) {
+      if (!dayMap.has(row.day_jst)) dayMap.set(row.day_jst, { MANUAL: 0, ESTIMATED: 0 });
+      const item = dayMap.get(row.day_jst);
+      if (item[row.source] != null) item[row.source] += Number(row.total_amount) || 0;
+    }
+    const dayRows = [...dayMap.entries()].slice(0, Number(days) === 7 ? 7 : 14);
+    const dayMax = Math.max(1, ...dayRows.map(([, item]) => item.MANUAL + item.ESTIMATED));
+    $("staminaDaily").innerHTML = dayRows.length
+      ? dayRows.map(([day, item]) => {
+          const total = item.MANUAL + item.ESTIMATED;
+          return '<div class="daily-row"><span>' + escapeHtml(day.slice(5)) + '</span>' +
+            '<div class="daily-track"><i class="manual" style="width:' + (item.MANUAL / dayMax * 100) + '%"></i>' +
+            '<i class="estimated" style="width:' + (item.ESTIMATED / dayMax * 100) + '%"></i></div>' +
+            '<b>' + total + '</b></div>';
+        }).join("")
+      : '<p class="empty-history">まだ履歴がありません。</p>';
+
+    $("staminaHistory").innerHTML = (data.history || []).length
+      ? data.history.map((row) =>
+          '<tr><td>' + escapeHtml(formatJst(row.used_at)) + '</td>' +
+          '<td>' + escapeHtml(row.gameName || GAME_NAMES[row.game_code] || row.game_code) + '</td>' +
+          '<td>' + escapeHtml(row.amount) + '</td>' +
+          '<td><span class="source-badge ' + sourceClass(row.source) + '">' + sourceLabel(row.source) + '</span></td>' +
+          '<td>' + escapeHtml(row.note || "") + '</td>' +
+          '<td><button type="button" class="delete-history" data-id="' + escapeHtml(row.id) + '">削除</button></td></tr>'
+        ).join("")
+      : '<tr><td colspan="6" class="empty-history">使用履歴はまだありません。</td></tr>';
+
+    $("staminaResourceHistory").innerHTML = (data.resourceHistory || []).length
+      ? data.resourceHistory.map((row) =>
+          '<tr><td>' + escapeHtml(formatJst(row.observed_at)) + '</td>' +
+          '<td>' + escapeHtml(row.gameName || GAME_NAMES[row.game_code] || row.game_code) + '</td>' +
+          '<td>' + escapeHtml(row.current_amount) + ' / ' + escapeHtml(row.max_amount) + '</td></tr>'
+        ).join("")
+      : '<tr><td colspan="3" class="empty-history">観測履歴はまだありません。</td></tr>';
+
+    $("staminaMessage").textContent = "表示中: " + (game === "all" ? "全ゲーム" : (GAME_NAMES[game] || game)) + " / 直近" + days + "日";
+  } catch (error) {
+    if (error.status === 401) return setLoggedOutView();
+    $("staminaMessage").textContent = "統計を読み込めません: " + error.message;
+  }
+}
+
+async function submitStaminaUse(event) {
+  event.preventDefault();
+  const localValue = $("staminaUsedAt").value;
+  if (!localValue) return;
+  $("staminaMessage").textContent = "履歴を保存中…";
+  try {
+    const usedAt = new Date(localValue + ":00+09:00").toISOString();
+    await api("/api/stamina/use", {
+      method: "POST",
+      body: JSON.stringify({
+        gameCode: $("staminaUseGame").value,
+        usedAt,
+        amount: Number($("staminaAmount").value),
+        note: $("staminaNote").value
+      })
+    });
+    $("staminaAmount").value = "";
+    $("staminaNote").value = "";
+    $("staminaMessage").textContent = "使用履歴を保存しました。";
+    await loadStaminaAnalytics();
+  } catch (error) {
+    $("staminaMessage").textContent = error.message;
+  }
+}
+
+async function deleteStaminaUse(id) {
+  if (!confirm("この使用履歴を削除しますか？")) return;
+  try {
+    await api("/api/stamina/use/" + encodeURIComponent(id), { method: "DELETE" });
+    await loadStaminaAnalytics();
+  } catch (error) {
+    $("staminaMessage").textContent = error.message;
+  }
+}
+
 async function loadSettings() {
   const data = await api("/api/settings");
   state.settings = data.settings;
@@ -142,6 +284,7 @@ $("loginForm").addEventListener("submit", async (event) => {
     state.me = data.user;
     setAuthedView(data.user);
     await Promise.all([loadSettings(), loadDashboard()]);
+    await loadStaminaAnalytics();
   } catch (error) { $("authMessage").textContent = error.message; }
 });
 
@@ -154,6 +297,7 @@ $("registerForm").addEventListener("submit", async (event) => {
     state.me = data.user;
     setAuthedView(data.user);
     await Promise.all([loadSettings(), loadDashboard()]);
+    await loadStaminaAnalytics();
   } catch (error) { $("authMessage").textContent = error.message; }
 });
 
@@ -187,6 +331,7 @@ $("settingsForm").addEventListener("submit", async (event) => {
     $("settingsMessage").textContent = "保存しました。";
     await loadSettings();
     await loadDashboard();
+    await loadStaminaAnalytics();
     setTimeout(() => $("settingsDialog").close(), 450);
   } catch (error) { $("settingsMessage").textContent = error.message; }
 });
@@ -198,6 +343,16 @@ $("testDiscordBtn").addEventListener("click", async () => {
     $("settingsMessage").textContent = "Discordへテスト通知を送りました。";
   } catch (error) { $("settingsMessage").textContent = error.message; }
 });
+
+$("staminaRefreshBtn").addEventListener("click", loadStaminaAnalytics);
+$("staminaGameFilter").addEventListener("change", loadStaminaAnalytics);
+$("staminaDaysFilter").addEventListener("change", loadStaminaAnalytics);
+$("staminaUseForm").addEventListener("submit", submitStaminaUse);
+$("staminaHistory").addEventListener("click", (event) => {
+  const button = event.target.closest(".delete-history");
+  if (button) deleteStaminaUse(button.dataset.id);
+});
+$("staminaUsedAt").value = jstInputNow();
 
 async function boot() {
   try {
