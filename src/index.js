@@ -10,6 +10,13 @@ import {
 } from "./auth.js";
 import { decryptSecret, encryptSecret } from "./crypto.js";
 import { getAllGameStatuses } from "./hoyo.js";
+import {
+  cleanDays,
+  cleanGameCode,
+  cleanManualUse,
+  getStaminaAnalytics,
+  saveResourceObservations
+} from "./stamina.js";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -261,7 +268,57 @@ async function handleStatus(request, env) {
     });
   }
   const result = await getAllGameStatuses(credentials);
-  return json({ ok: true, hoyoConfigured: true, fetchedAt: new Date().toISOString(), ...result });
+  const fetchedAt = new Date().toISOString();
+  try {
+    await saveResourceObservations(env, user.id, result.games, fetchedAt);
+  } catch (error) {
+    console.error("Failed to save stamina observation", error);
+  }
+  return json({ ok: true, hoyoConfigured: true, fetchedAt, ...result });
+}
+
+async function handleStaminaAnalytics(request, env) {
+  const user = await requireUser(env, request);
+  const url = new URL(request.url);
+  const gameCode = cleanGameCode(url.searchParams.get("game") || "all", true);
+  const days = cleanDays(url.searchParams.get("days") || 30);
+  const data = await getStaminaAnalytics(env, user.id, gameCode, days);
+  return json({ ok: true, ...data });
+}
+
+async function handleStaminaUse(request, env) {
+  assertSameOrigin(request);
+  const user = await requireUser(env, request);
+  const body = cleanManualUse(await readJson(request));
+  await env.DB.prepare(
+    "INSERT INTO stamina_use_logs " +
+    "(user_id, game_code, amount, used_at, source, note, snapshot_id, created_at) " +
+    "VALUES (?, ?, ?, ?, 'MANUAL', ?, NULL, ?)"
+  ).bind(
+    user.id,
+    body.gameCode,
+    body.amount,
+    body.usedAt,
+    body.note,
+    new Date().toISOString()
+  ).run();
+  return json({ ok: true, message: "スタミナ使用履歴を登録しました。" }, 201);
+}
+
+async function handleDeleteStaminaUse(request, env, idText) {
+  assertSameOrigin(request);
+  const user = await requireUser(env, request);
+  const id = Number(idText);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return apiError("履歴IDが不正です。", 400, "request");
+  }
+  const result = await env.DB.prepare(
+    "DELETE FROM stamina_use_logs WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).run();
+  if (!result?.meta?.changes) {
+    return apiError("削除する履歴が見つかりません。", 404, "not_found");
+  }
+  return json({ ok: true, message: "スタミナ使用履歴を削除しました。" });
 }
 
 async function sendDiscord(webhook, content) {
@@ -328,6 +385,11 @@ async function notifyOneUser(env, row) {
   }
 
   const { games } = await getAllGameStatuses(credentials);
+  try {
+    await saveResourceObservations(env, row.user_id, games, new Date().toISOString());
+  } catch (error) {
+    console.error("Failed to save scheduled stamina observation", row.user_id, error);
+  }
   const configuredGames = games.filter((game) => game.configured);
   const incomplete = configuredGames.filter((game) => game.daily.completed === false);
   if (incomplete.length === 0) return;
@@ -381,6 +443,11 @@ async function handleApi(request, env) {
   if (method === "GET" && path === "/api/settings") return handleGetSettings(request, env);
   if (method === "PUT" && path === "/api/settings") return handleSaveSettings(request, env);
   if (method === "GET" && path === "/api/status") return handleStatus(request, env);
+  if (method === "GET" && path === "/api/stamina/analytics") return handleStaminaAnalytics(request, env);
+  if (method === "POST" && path === "/api/stamina/use") return handleStaminaUse(request, env);
+  if (method === "DELETE" && path.startsWith("/api/stamina/use/")) {
+    return handleDeleteStaminaUse(request, env, path.slice("/api/stamina/use/".length));
+  }
   if (method === "POST" && path === "/api/discord/test") return handleDiscordTest(request, env);
   if (method === "GET" && path === "/api/health") {
     return json({ ok: true, service: "hoyo-daily-status", time: new Date().toISOString() });
