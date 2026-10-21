@@ -361,6 +361,7 @@ async function boot() {
     state.me = data.user;
     setAuthedView(data.user);
     await Promise.all([loadSettings(), loadDashboard()]);
+    await loadStaminaAnalytics();
   } catch (error) {
     $("authView").classList.remove("hidden");
     $("authMessage").textContent = error.message;
